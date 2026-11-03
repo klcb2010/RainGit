@@ -81,7 +81,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION_NAME="$(sed -nE 's/.*versionName = "([^"]+)".*/\\1/p' app/build.gradle.kts | head -n 1)"
+          VERSION_NAME="$(sed -nE 's/.*versionName = "([^"]+)".*/\1/p' app/build.gradle.kts | head -n 1)"
           test -n "$VERSION_NAME"
           APK="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -type f | head -n 1)"
           test -n "$APK"
