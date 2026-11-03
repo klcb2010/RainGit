@@ -315,7 +315,57 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         selectedDir = dir
         refreshLocalInner(dir)
         reloadLocal()
-        message = "已克隆分支 $branch 到 ${dir.path}"
+        message = "已完整克隆仓库并检出 $branch：${dir.path}"
+    }
+
+    fun openBranchWorkspace(selectedBranch: String) = launchAction {
+        require(!downloading) { "请等待下载完成后再切换工作目录" }
+        val repo = selectedRepo ?: throw IOException("无法识别远端仓库")
+        val currentDir = selectedDir ?: throw IOException("请先克隆仓库")
+        val branch = selectedBranch.removePrefix("origin/")
+        require(branch.isNotBlank() && !branch.startsWith("refs/")) { "分支名称无效" }
+
+        if (local { git.currentBranch(currentDir) } == branch) {
+            message = "当前已经位于 $branch 工作目录"
+            return@launchAction
+        }
+
+        val root = store.root()
+        val origin = repo.cloneUrl.removeSuffix(".git")
+        val existing = local {
+            root.listFiles().orEmpty().asSequence()
+                .filter { git.isRepo(it) }
+                .firstOrNull { dir ->
+                    runCatching {
+                        git.remoteUrl(dir).removeSuffix(".git") == origin &&
+                            git.currentBranch(dir) == branch
+                    }.getOrDefault(false)
+                }
+        }
+
+        val target = existing ?: run {
+            val remoteBranches = local { git.remoteBranches(repo) }
+            require(branch in remoteBranches) {
+                "本地分支 $branch 尚未有独立工作目录，且远端不存在同名分支；请先推送该分支"
+            }
+            val branchDir = git.branchDirectory(root, repo, branch)
+            require(!git.isRepo(branchDir)) { "分支目录已存在但不是有效仓库：${branchDir.path}" }
+            local { git.clone(repo, root, branch, branchDir) }
+        }
+
+        closeEditor()
+        closeDiff()
+        selectedDir = target
+        snapshot = null
+        files = emptyList()
+        directories = emptyList()
+        refreshLocalInner(target)
+        reloadLocal()
+        message = if (existing != null) {
+            "已切换到 $branch 独立工作目录：${target.path}"
+        } else {
+            "已完整克隆仓库并创建 $branch 独立工作目录：${target.path}"
+        }
     }
 
     private suspend fun refreshLocalInner(dir: File) {
