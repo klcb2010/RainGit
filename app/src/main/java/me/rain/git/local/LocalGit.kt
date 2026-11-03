@@ -67,7 +67,8 @@ class LocalGit(private val token: () -> String?) {
         repo: RemoteRepo,
         root: File,
         branch: String = repo.defaultBranch,
-        targetDir: File = directory(root, repo)
+        targetDir: File = directory(root, repo),
+        allBranches: Boolean = true
     ): File {
         val dir = targetDir
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
@@ -75,7 +76,7 @@ class LocalGit(private val token: () -> String?) {
         val temporary = File(root, ".rain-clone-${java.util.UUID.randomUUID()}")
         try {
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
-                .setCredentialsProvider(auth()).setCloneAllBranches(true).setBranch(branch)
+                .setCredentialsProvider(auth()).setCloneAllBranches(allBranches).setBranch(branch)
                 // Clone initializes its repository before invoking this callback.
                 // Persist the limits before its first fetch can trigger autoGC;
                 // FileRepository.getConfig() reloads the changed config from disk.
