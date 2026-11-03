@@ -38,7 +38,8 @@ internal fun RemoteScreen(
     val localNames = remember(vm.localDirs) { vm.localDirs.map { it.name }.toSet() }
     val filtered = remember(vm.repos, vm.favoriteRepos, localNames, search, filter) {
         vm.repos.filter { repo ->
-            val present = "${repo.owner}--${repo.name}" in localNames
+            val baseName = "${repo.owner}--${repo.name}"
+            val present = localNames.any { it == baseName || it.startsWith("$baseName--branch-") }
             (repo.fullName.contains(search, true) || repo.description.contains(search, true)) && when (filter) {
                 1 -> repo.fullName in vm.favoriteRepos
                 2 -> present
@@ -69,7 +70,8 @@ internal fun RemoteScreen(
         }
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 5.dp, bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             items(filtered, key = { it.fullName }) { repo ->
-                val local = vm.localDirs.any { it.name == "${repo.owner}--${repo.name}" }
+                val baseName = "${repo.owner}--${repo.name}"
+                val local = vm.localDirs.any { it.name == baseName || it.name.startsWith("$baseName--branch-") }
                 RepositoryTile(vm, repo, local, actionsOnly, sharedScope, visibilityScope)
             }
             if (filtered.isEmpty()) item {
@@ -334,7 +336,7 @@ internal fun RepositoryScreen(
             text = {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
                     Text(
-                        if (vm.busy) "正在从远端获取最新分支…" else "已检测本地及远端分支。选择要检出的分支；工作区有未提交修改时，需要先提交或保存到 Stash。",
+                        if (vm.busy) "正在从远端获取最新分支…" else "每个分支使用独立文件夹。选择分支后，RainGit 会打开已有工作目录；首次选择则完整克隆仓库并检出该分支，当前目录的未提交修改会保留。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     if (branches.isEmpty()) {
@@ -359,7 +361,7 @@ internal fun RepositoryScreen(
             confirmButton = {
                 TextButton(onClick = {
                     showBranchPicker = false
-                    vm.gitOperation("checkout", chosenBranch)
+                    vm.openBranchWorkspace(chosenBranch)
                 }, enabled = chosenBranch.isNotBlank() && chosenBranch in branches && chosenBranch != vm.snapshot?.branch && !vm.busy) {
                     Text("切换分支")
                 }
