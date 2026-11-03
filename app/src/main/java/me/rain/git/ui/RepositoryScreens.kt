@@ -147,7 +147,7 @@ private fun RepositoryTile(
                 if (!actionsOnly) {
                     TextButton(onClick = {
                         if (local) vm.openRemote(repo, 0)
-                        else { vm.openRemote(repo, 0); vm.clone() }
+                        else { vm.openRemote(repo, 0); vm.prepareClone() }
                     }, enabled = !vm.busy && !vm.downloading, modifier = Modifier.weight(1f)) {
                         Icon(if (local) Icons.Rounded.Code else Icons.Rounded.CloudDownload, null, Modifier.size(18.dp))
                         Spacer(Modifier.width(6.dp))
@@ -315,6 +315,40 @@ internal fun RepositoryScreen(
     // Retain the matched repository while the reverse transition is running.
     // closeDetail() clears selectedRepo before the outgoing scene is disposed.
     val transitionRepo = remember { vm.selectedRepo }
+
+    if (vm.showCloneDialog) {
+        var selectedBranch by remember(vm.selectedRepo?.fullName, vm.cloneBranches) {
+            mutableStateOf(vm.selectedRepo?.defaultBranch?.takeIf { it in vm.cloneBranches } ?: vm.cloneBranches.firstOrNull().orEmpty())
+        }
+        AlertDialog(
+            onDismissRequest = vm::dismissCloneDialog,
+            title = { Text("选择克隆分支") },
+            text = {
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text("将克隆全部远端分支，并检出所选分支。", style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    vm.cloneBranches.forEach { branch ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { selectedBranch = branch }.padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = selectedBranch == branch, onClick = { selectedBranch = branch })
+                            Text(branch, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodyMedium)
+                            if (branch == vm.selectedRepo?.defaultBranch) {
+                                Spacer(Modifier.width(8.dp))
+                                Text("默认", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { vm.clone(selectedBranch) }, enabled = selectedBranch.isNotBlank()) { Text("克隆此分支") }
+            },
+            dismissButton = { TextButton(onClick = vm::dismissCloneDialog) { Text("取消") } }
+        )
+    }
     Column(Modifier.fillMaxSize()) {
         val dir = vm.selectedDir
         val currentRepo = vm.selectedRepo ?: transitionRepo
@@ -365,7 +399,7 @@ internal fun RepositoryScreen(
                             style = MaterialTheme.typography.labelMedium, maxLines = 1,
                             overflow = TextOverflow.Ellipsis)
                         if (dir == null && vm.screen == "detail" && !vm.busy && !vm.downloading) {
-                            TextButton(onClick = vm::clone) { Text("克隆") }
+                            TextButton(onClick = vm::prepareClone) { Text("克隆") }
                         } else if (dir != null && vm.snapshot != null) {
                             val snap = vm.snapshot!!
                             val changes = (snap.staged + snap.changed + snap.untracked + snap.deleted + snap.conflicts).distinct().size

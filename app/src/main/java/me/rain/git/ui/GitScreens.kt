@@ -42,6 +42,7 @@ internal fun ChangesScreen(vm: RainViewModel) {
     var showTools by rememberSaveable(dir.path) { mutableStateOf(false) }
     var menu by remember { mutableStateOf(false) }
     var discardPath by remember { mutableStateOf<String?>(null) }
+    var confirmForcePull by remember { mutableStateOf(false) }
     val keyboard = LocalSoftwareKeyboardController.current
     val writable = !vm.busy && !vm.downloading && snap != null
     val hasChanges = changedFiles.isNotEmpty()
@@ -70,6 +71,7 @@ internal fun ChangesScreen(vm: RainViewModel) {
                 IconButton(onClick = { menu = true }, enabled = !vm.busy) { Icon(Icons.Rounded.MoreVert, "更多操作") }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
                     DropdownMenuItem(text = { Text("获取远端状态") }, onClick = { menu = false; vm.gitOperation("fetch") }, enabled = writable)
+                    DropdownMenuItem(text = { Text("强制拉取远端（覆盖本地）") }, onClick = { menu = false; confirmForcePull = true }, enabled = writable)
                     DropdownMenuItem(text = { Text("查看未暂存差异") }, onClick = { menu = false; vm.showDiff(false) }, enabled = unstaged.isNotEmpty())
                     DropdownMenuItem(text = { Text("查看已暂存差异") }, onClick = { menu = false; vm.showDiff(true) }, enabled = staged.isNotEmpty())
                     HorizontalDivider()
@@ -171,6 +173,20 @@ internal fun ChangesScreen(vm: RainViewModel) {
         }
     }
     if (showTools) GitToolsPanel(vm) { showTools = false }
+    if (confirmForcePull) {
+        AlertDialog(
+            onDismissRequest = { confirmForcePull = false },
+            title = { Text("强制拉取远端？") },
+            text = { Text("将获取 origin 当前分支，然后用远端版本覆盖本地：丢弃所有未提交修改、终止进行中的合并，并删除未跟踪文件和目录。已忽略的文件（包括 dist 下载目录）会保留。此操作不可撤销。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmForcePull = false
+                    vm.gitOperation("force-pull")
+                }, enabled = writable) { Text("确认强制拉取") }
+            },
+            dismissButton = { TextButton(onClick = { confirmForcePull = false }) { Text("取消") } }
+        )
+    }
     discardPath?.let { path ->
         AlertDialog(onDismissRequest = { discardPath = null }, title = { Text("撤销修改？") },
             text = { Text("用已暂存版本恢复 $path，未暂存内容将丢失。") },

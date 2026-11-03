@@ -69,6 +69,10 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var selectedRepo by androidx.compose.runtime.mutableStateOf<RemoteRepo?>(null)
         private set
+    var cloneBranches by androidx.compose.runtime.mutableStateOf<List<String>>(emptyList())
+        private set
+    var showCloneDialog by androidx.compose.runtime.mutableStateOf(false)
+        private set
     var selectedDir by androidx.compose.runtime.mutableStateOf<File?>(null)
         private set
     var snapshot by androidx.compose.runtime.mutableStateOf<LocalGit.Snapshot?>(null)
@@ -291,14 +295,27 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         refreshLocal()
     }
 
-    fun clone() = launchAction {
+    fun prepareClone() = launchAction {
         require(!downloading) { "下载完成后再克隆仓库" }
         val repo = selectedRepo ?: throw IOException("请先选择远程仓库")
-        val dir = local { git.clone(repo, store.root()) }
+        val branches = local { git.remoteBranches(repo) }
+        require(branches.isNotEmpty()) { "远端没有可克隆的分支" }
+        cloneBranches = branches
+        showCloneDialog = true
+    }
+
+    fun dismissCloneDialog() { showCloneDialog = false }
+
+    fun clone(branch: String) = launchAction {
+        require(!downloading) { "下载完成后再克隆仓库" }
+        val repo = selectedRepo ?: throw IOException("请先选择远程仓库")
+        require(branch in cloneBranches) { "所选分支已不在远端列表中，请重新获取" }
+        showCloneDialog = false
+        val dir = local { git.clone(repo, store.root(), branch) }
         selectedDir = dir
         refreshLocalInner(dir)
         reloadLocal()
-        message = "已克隆到 ${dir.path}"
+        message = "已克隆分支 $branch 到 ${dir.path}"
     }
 
     private suspend fun refreshLocalInner(dir: File) {
@@ -324,6 +341,7 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
             when (name) {
                 "fetch" -> git.fetch(dir)
                 "pull" -> git.pull(dir)
+                "force-pull" -> git.forcePull(dir)
                 "push" -> git.push(dir)
                 "stage" -> { git.stage(dir, value); "已暂存" }
                 "unstage" -> { git.unstage(dir, value); "已取消暂存" }
