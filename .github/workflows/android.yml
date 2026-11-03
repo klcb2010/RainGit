@@ -76,11 +76,44 @@ jobs:
             exit 1
           fi
           echo "Release APK: $APK_BYTES bytes ($(du -h "$APK" | cut -f1))"
+      - name: Prepare named Release APK
+        id: release_meta
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION_NAME="$(sed -nE 's/.*versionName = "([^"]+)".*/\\1/p' app/build.gradle.kts | head -n 1)"
+          test -n "$VERSION_NAME"
+          APK="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' -type f | head -n 1)"
+          test -n "$APK"
+          mkdir -p release
+          ASSET_NAME="RainGit-v${VERSION_NAME}-build.${GITHUB_RUN_NUMBER}.apk"
+          cp "$APK" "release/$ASSET_NAME"
+          echo "version=$VERSION_NAME" >> "$GITHUB_OUTPUT"
+          echo "asset=$ASSET_NAME" >> "$GITHUB_OUTPUT"
+          echo "Prepared: $ASSET_NAME"
       - name: Upload signed Release APK
         uses: actions/upload-artifact@v4
         with:
-          name: RainGit-release-${{ github.run_number }}
-          path: app/build/outputs/apk/release/*.apk
+          name: RainGit-v${{ steps.release_meta.outputs.version }}-build.${{ github.run_number }}
+          path: release/*.apk
           if-no-files-found: error
           compression-level: 0
           retention-days: 14
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.release_meta.outputs.version }}-build.${{ github.run_number }}
+          name: RainGit v${{ steps.release_meta.outputs.version }} (Build #${{ github.run_number }})
+          body: |
+            **RainGit v${{ steps.release_meta.outputs.version }}**
+
+            - Build: #${{ github.run_number }}
+            - Commit: ${{ github.sha }}
+            - Branch: ${{ github.ref_name }}
+
+            本次构建由 GitHub Actions 自动编译并使用固定 Release 签名。
+          files: release/*.apk
+          fail_on_unmatched_files: true
+          draft: false
+          prerelease: false
+          make_latest: true
