@@ -326,13 +326,11 @@ internal fun RepositoryScreen(
         chosenBranch = vm.snapshot?.branch.orEmpty()
         showBranchPicker = true
         // Fetch first so branches created after the original clone are discovered.
-        vm.gitOperation("fetch")
+        vm.prepareBranchPicker()
     }
 
     if (showBranchPicker) {
-        val branches = vm.snapshot?.branches.orEmpty().distinct().filter { it.isNotBlank() && !it.contains(" -> ") }.sortedWith(
-            compareBy<String> { it.startsWith("origin/") }.thenBy { it }
-        )
+        val branches = vm.branchOptions.distinct().filter { it.isNotBlank() && !it.contains(" -> ") }
         AlertDialog(
             onDismissRequest = { showBranchPicker = false },
             title = { Text("切换分支") },
