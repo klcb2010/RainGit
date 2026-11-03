@@ -46,7 +46,10 @@ internal fun RemoteScreen(
                 3 -> repo.privateRepo
                 else -> true
             }
-        }.sortedWith(compareByDescending<RemoteRepo> { it.fullName in vm.favoriteRepos }.thenByDescending { "${it.owner}--${it.name}" in localNames }.thenByDescending { it.updatedAt })
+        }.sortedWith(compareByDescending<RemoteRepo> { it.fullName in vm.favoriteRepos }.thenByDescending { repo ->
+            val baseName = "${repo.owner}--${repo.name}"
+            localNames.any { it == baseName || it.startsWith("$baseName--branch-") }
+        }.thenByDescending { it.updatedAt })
     }
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.padding(horizontal = 18.dp, vertical = 8.dp)) {
