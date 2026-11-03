@@ -44,7 +44,8 @@ class LocalGit(private val token: () -> String?) {
 
     fun branchDirectory(root: File, repo: RemoteRepo, branch: String): File {
         val base = directory(root, repo)
-        if (branch == repo.defaultBranch) return base
+        if (branch == repo.defaultBranch &&
+            (!isRepo(base) || runCatching { currentBranch(base) == branch }.getOrDefault(false))) return base
         require(org.eclipse.jgit.lib.Repository.isValidRefName("refs/heads/$branch")) { "分支名称不合法" }
         val safe = branch.replace(Regex("[^A-Za-z0-9._-]"), "_").take(32).ifBlank { "branch" }
         val hash = java.security.MessageDigest.getInstance("SHA-256")
