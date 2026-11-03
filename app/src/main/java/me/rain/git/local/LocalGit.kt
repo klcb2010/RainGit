@@ -44,14 +44,19 @@ class LocalGit(private val token: () -> String?) {
 
     fun isRepo(dir: File) = dir.isDirectory && File(dir, ".git").exists()
 
-    fun clone(repo: RemoteRepo, root: File): File {
+    fun remoteBranches(repo: RemoteRepo): List<String> =
+        Git.lsRemoteRepository().setRemote(repo.cloneUrl).setHeads(true)
+            .setCredentialsProvider(auth()).call()
+            .map { it.name.removePrefix("refs/heads/") }.distinct().sorted()
+
+    fun clone(repo: RemoteRepo, root: File, branch: String = repo.defaultBranch): File {
         val dir = directory(root, repo)
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         val temporary = File(root, ".rain-clone-${java.util.UUID.randomUUID()}")
         try {
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
-                .setCredentialsProvider(auth()).setCloneAllBranches(true)
+                .setCredentialsProvider(auth()).setCloneAllBranches(true).setBranch(branch)
                 // Clone initializes its repository before invoking this callback.
                 // Persist the limits before its first fetch can trigger autoGC;
                 // FileRepository.getConfig() reloads the changed config from disk.
@@ -110,6 +115,36 @@ class LocalGit(private val token: () -> String?) {
     fun fetch(dir: File) = openGit(dir).use { git ->
         git.fetch().setCredentialsProvider(auth()).call()
         "Fetch 完成"
+    }
+
+    fun forcePull(dir: File): String = openGit(dir).use { git ->
+        val fullBranch = git.repository.fullBranch
+        require(fullBranch != null && fullBranch.startsWith(Constants.R_HEADS)) {
+            "请先切换到本地分支"
+        }
+        val branch = fullBranch.removePrefix(Constants.R_HEADS)
+        git.fetch().setRemote("origin").setCredentialsProvider(auth()).call()
+
+        if (git.repository.repositoryState == org.eclipse.jgit.lib.RepositoryState.MERGING ||
+            git.repository.repositoryState == org.eclipse.jgit.lib.RepositoryState.MERGING_RESOLVED) {
+            git.reset().setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).setRef("HEAD").call()
+        }
+
+        val remoteRef = "refs/remotes/origin/$branch"
+        require(git.repository.resolve(remoteRef) != null) {
+            "远端不存在 origin/$branch，已停止重置"
+        }
+        git.reset().setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD).setRef(remoteRef).call()
+
+        val status = git.status().call()
+        val cleanPaths = (status.untracked + status.untrackedFolders).filterNot {
+            it == "dist" || it.startsWith("dist/")
+        }.toSet()
+        if (cleanPaths.isNotEmpty()) {
+            git.clean().setForce(false).setCleanDirectories(true).setIgnore(true)
+                .setPaths(cleanPaths).call()
+        }
+        "已强制同步 origin/$branch；本地未提交修改已丢弃"
     }
 
     fun pull(dir: File): String = openGit(dir).use { git ->
