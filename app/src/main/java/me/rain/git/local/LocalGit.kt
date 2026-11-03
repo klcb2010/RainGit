@@ -42,6 +42,17 @@ class LocalGit(private val token: () -> String?) {
         return File(root, "${repo.owner}--${repo.name}")
     }
 
+    fun branchDirectory(root: File, repo: RemoteRepo, branch: String): File {
+        val base = directory(root, repo)
+        if (branch == repo.defaultBranch) return base
+        require(org.eclipse.jgit.lib.Repository.isValidRefName("refs/heads/$branch")) { "分支名称不合法" }
+        val safe = branch.replace(Regex("[^A-Za-z0-9._-]"), "_").take(32).ifBlank { "branch" }
+        val hash = java.security.MessageDigest.getInstance("SHA-256")
+            .digest(branch.toByteArray(Charsets.UTF_8))
+            .take(6).joinToString("") { "%02x".format(it) }
+        return File(root, "${base.name}--branch-$safe-$hash")
+    }
+
     fun isRepo(dir: File) = dir.isDirectory && File(dir, ".git").exists()
 
     fun remoteBranches(repo: RemoteRepo): List<String> =
@@ -49,8 +60,15 @@ class LocalGit(private val token: () -> String?) {
             .setCredentialsProvider(auth()).call()
             .map { it.name.removePrefix("refs/heads/") }.distinct().sorted()
 
-    fun clone(repo: RemoteRepo, root: File, branch: String = repo.defaultBranch): File {
-        val dir = directory(root, repo)
+    fun currentBranch(dir: File): String? = openGit(dir).use { it.repository.branch }
+
+    fun clone(
+        repo: RemoteRepo,
+        root: File,
+        branch: String = repo.defaultBranch,
+        targetDir: File = directory(root, repo)
+    ): File {
+        val dir = targetDir
         require(!isRepo(dir)) { "仓库已存在，请直接打开" }
         require(!dir.exists() || dir.listFiles()?.all { it.name == "dist" } == true) { "目标目录包含其他文件" }
         val temporary = File(root, ".rain-clone-${java.util.UUID.randomUUID()}")
