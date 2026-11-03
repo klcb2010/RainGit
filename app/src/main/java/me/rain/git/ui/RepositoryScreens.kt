@@ -377,12 +377,18 @@ internal fun RepositoryScreen(
         var selectedBranch by remember(vm.selectedRepo?.fullName, vm.cloneBranches) {
             mutableStateOf(vm.selectedRepo?.defaultBranch?.takeIf { it in vm.cloneBranches } ?: vm.cloneBranches.firstOrNull().orEmpty())
         }
+        var cloneAllBranches by remember(vm.selectedRepo?.fullName, vm.cloneBranches) {
+            mutableStateOf(true)
+        }
         AlertDialog(
             onDismissRequest = vm::dismissCloneDialog,
             title = { Text("选择克隆分支") },
             text = {
                 Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    Text("将克隆全部远端分支，并检出所选分支。", style = MaterialTheme.typography.bodySmall,
+                    Text(
+                        if (cloneAllBranches) "将克隆仓库的全部远端分支，并检出所选分支；保留完整 Git 历史。"
+                        else "只克隆所选分支，并保留该分支的完整 Git 历史。",
+                        style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
                     vm.cloneBranches.forEach { branch ->
@@ -398,10 +404,30 @@ internal fun RepositoryScreen(
                             }
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    Row(
+                        Modifier.fillMaxWidth().clickable { cloneAllBranches = !cloneAllBranches }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Checkbox(checked = cloneAllBranches, onCheckedChange = { cloneAllBranches = it })
+                        Column(Modifier.padding(start = 8.dp)) {
+                            Text("克隆全部分支", style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                if (cloneAllBranches) "包含远端所有分支，之后可快速切换"
+                                else "仅下载当前选择的分支，其他分支切换时再单独克隆",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { vm.clone(selectedBranch) }, enabled = selectedBranch.isNotBlank()) { Text("克隆此分支") }
+                TextButton(
+                    onClick = { vm.clone(selectedBranch, cloneAllBranches) },
+                    enabled = selectedBranch.isNotBlank()
+                ) { Text("克隆此分支") }
             },
             dismissButton = { TextButton(onClick = vm::dismissCloneDialog) { Text("取消") } }
         )
