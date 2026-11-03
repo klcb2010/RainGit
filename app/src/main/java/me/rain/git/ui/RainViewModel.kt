@@ -308,16 +308,20 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun dismissCloneDialog() { showCloneDialog = false }
 
-    fun clone(branch: String) = launchAction {
+    fun clone(branch: String, allBranches: Boolean = true) = launchAction {
         require(!downloading) { "下载完成后再克隆仓库" }
         val repo = selectedRepo ?: throw IOException("请先选择远程仓库")
         require(branch in cloneBranches) { "所选分支已不在远端列表中，请重新获取" }
         showCloneDialog = false
-        val dir = local { git.clone(repo, store.root(), branch) }
+        val dir = local { git.clone(repo, store.root(), branch, allBranches = allBranches) }
         selectedDir = dir
         refreshLocalInner(dir)
         reloadLocal()
-        message = "已完整克隆仓库并检出 $branch：${dir.path}"
+        message = if (allBranches) {
+            "已完整克隆全部分支并检出 $branch：${dir.path}"
+        } else {
+            "已仅克隆 $branch 分支：${dir.path}"
+        }
     }
 
     fun openBranchWorkspace(selectedBranch: String) = launchAction {
