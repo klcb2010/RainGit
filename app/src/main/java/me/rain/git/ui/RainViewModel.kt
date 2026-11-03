@@ -71,6 +71,8 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         private set
     var cloneBranches by androidx.compose.runtime.mutableStateOf<List<String>>(emptyList())
         private set
+    var branchOptions by androidx.compose.runtime.mutableStateOf<List<String>>(emptyList())
+        private set
     var showCloneDialog by androidx.compose.runtime.mutableStateOf(false)
         private set
     var selectedDir by androidx.compose.runtime.mutableStateOf<File?>(null)
@@ -307,6 +309,17 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun dismissCloneDialog() { showCloneDialog = false }
+
+    fun prepareBranchPicker() = launchAction {
+        val repo = selectedRepo ?: throw IOException("无法识别远端仓库")
+        val localBranches = snapshot?.branches.orEmpty().filter {
+            it.isNotBlank() && !it.startsWith("origin/") && !it.contains(" -> ")
+        }
+        val remoteBranches = local { git.remoteBranches(repo) }
+        branchOptions = (localBranches + remoteBranches.map { "origin/$it" })
+            .distinct()
+            .sortedWith(compareBy<String> { it.startsWith("origin/") }.thenBy { it })
+    }
 
     fun clone(branch: String, allBranches: Boolean = true) = launchAction {
         require(!downloading) { "下载完成后再克隆仓库" }
