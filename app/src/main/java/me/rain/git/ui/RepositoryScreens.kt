@@ -317,6 +317,12 @@ internal fun RepositoryScreen(
     val transitionRepo = remember { vm.selectedRepo }
     var showBranchPicker by remember(repositoryKey) { mutableStateOf(false) }
     var chosenBranch by remember(repositoryKey, vm.snapshot?.branch) { mutableStateOf(vm.snapshot?.branch.orEmpty()) }
+    val openBranchPicker = {
+        chosenBranch = vm.snapshot?.branch.orEmpty()
+        showBranchPicker = true
+        // Fetch first so branches created after the original clone are discovered.
+        vm.gitOperation("fetch")
+    }
 
     if (showBranchPicker) {
         val branches = vm.snapshot?.branches.orEmpty().distinct().filter { it.isNotBlank() && !it.contains(" -> ") }.sortedWith(
@@ -326,11 +332,15 @@ internal fun RepositoryScreen(
             onDismissRequest = { showBranchPicker = false },
             title = { Text("切换分支") },
             text = {
-                if (branches.isEmpty()) Text("没有可用分支，请先刷新仓库。")
-                else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
-                    Text("选择要检出的本地或远端分支。工作区有未提交修改时，需要先提交或保存到 Stash。",
+                Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text(
+                        if (vm.busy) "正在从远端获取最新分支…" else "已检测本地及远端分支。选择要检出的分支；工作区有未提交修改时，需要先提交或保存到 Stash。",
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(8.dp))
+                    if (branches.isEmpty()) {
+                        Text(if (vm.busy) "正在读取分支列表…" else "暂时没有可用分支，请检查网络或远端仓库权限。",
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     branches.forEach { branch ->
                         Row(
                             Modifier.fillMaxWidth().clickable { chosenBranch = branch }.padding(vertical = 5.dp),
@@ -440,17 +450,13 @@ internal fun RepositoryScreen(
                         Text(
                             vm.snapshot?.branch ?: currentRepo.defaultBranch,
                             Modifier.weight(1f).then(if (dir != null && vm.snapshot != null) Modifier.clickable(enabled = !vm.busy && !vm.downloading) {
-                                chosenBranch = vm.snapshot?.branch.orEmpty()
-                                showBranchPicker = true
+                                openBranchPicker()
                             } else Modifier),
                             style = MaterialTheme.typography.labelMedium, maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
                         if (dir != null && vm.snapshot != null) {
-                            IconButton(onClick = {
-                                chosenBranch = vm.snapshot?.branch.orEmpty()
-                                showBranchPicker = true
-                            }, enabled = !vm.busy && !vm.downloading, modifier = Modifier.size(30.dp)) {
+                            IconButton(onClick = openBranchPicker, enabled = !vm.busy && !vm.downloading, modifier = Modifier.size(30.dp)) {
                                 Icon(Icons.Rounded.ArrowDropDown, "选择分支", tint = MaterialTheme.colorScheme.primary)
                             }
                         }
