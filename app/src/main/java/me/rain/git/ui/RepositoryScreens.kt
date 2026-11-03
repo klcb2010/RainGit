@@ -315,6 +315,48 @@ internal fun RepositoryScreen(
     // Retain the matched repository while the reverse transition is running.
     // closeDetail() clears selectedRepo before the outgoing scene is disposed.
     val transitionRepo = remember { vm.selectedRepo }
+    var showBranchPicker by remember(repositoryKey) { mutableStateOf(false) }
+    var chosenBranch by remember(repositoryKey, vm.snapshot?.branch) { mutableStateOf(vm.snapshot?.branch.orEmpty()) }
+
+    if (showBranchPicker) {
+        val branches = vm.snapshot?.branches.orEmpty().distinct().filter { it.isNotBlank() && !it.contains(" -> ") }.sortedWith(
+            compareBy<String> { it.startsWith("origin/") }.thenBy { it }
+        )
+        AlertDialog(
+            onDismissRequest = { showBranchPicker = false },
+            title = { Text("切换分支") },
+            text = {
+                if (branches.isEmpty()) Text("没有可用分支，请先刷新仓库。")
+                else Column(Modifier.heightIn(max = 420.dp).verticalScroll(rememberScrollState())) {
+                    Text("选择要检出的本地或远端分支。工作区有未提交修改时，需要先提交或保存到 Stash。",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    branches.forEach { branch ->
+                        Row(
+                            Modifier.fillMaxWidth().clickable { chosenBranch = branch }.padding(vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            RadioButton(selected = chosenBranch == branch, onClick = { chosenBranch = branch })
+                            Text(branch, Modifier.padding(start = 8.dp), style = MaterialTheme.typography.bodyMedium)
+                            if (branch.startsWith("origin/")) {
+                                Spacer(Modifier.width(8.dp))
+                                Text("远端", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.secondary)
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBranchPicker = false
+                    vm.gitOperation("checkout", chosenBranch)
+                }, enabled = chosenBranch.isNotBlank() && chosenBranch in branches && chosenBranch != vm.snapshot?.branch && !vm.busy) {
+                    Text("切换分支")
+                }
+            },
+            dismissButton = { TextButton(onClick = { showBranchPicker = false }) { Text("取消") } }
+        )
+    }
 
     if (vm.showCloneDialog) {
         var selectedBranch by remember(vm.selectedRepo?.fullName, vm.cloneBranches) {
@@ -395,9 +437,23 @@ internal fun RepositoryScreen(
                         Icon(Icons.Rounded.AccountTree, null, Modifier.size(16.dp),
                             tint = MaterialTheme.colorScheme.onSurfaceVariant)
                         Spacer(Modifier.width(7.dp))
-                        Text(vm.snapshot?.branch ?: currentRepo.defaultBranch, Modifier.weight(1f),
+                        Text(
+                            vm.snapshot?.branch ?: currentRepo.defaultBranch,
+                            Modifier.weight(1f).then(if (dir != null && vm.snapshot != null) Modifier.clickable(enabled = !vm.busy && !vm.downloading) {
+                                chosenBranch = vm.snapshot?.branch.orEmpty()
+                                showBranchPicker = true
+                            } else Modifier),
                             style = MaterialTheme.typography.labelMedium, maxLines = 1,
-                            overflow = TextOverflow.Ellipsis)
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        if (dir != null && vm.snapshot != null) {
+                            IconButton(onClick = {
+                                chosenBranch = vm.snapshot?.branch.orEmpty()
+                                showBranchPicker = true
+                            }, enabled = !vm.busy && !vm.downloading, modifier = Modifier.size(30.dp)) {
+                                Icon(Icons.Rounded.ArrowDropDown, "选择分支", tint = MaterialTheme.colorScheme.primary)
+                            }
+                        }
                         if (dir == null && vm.screen == "detail" && !vm.busy && !vm.downloading) {
                             TextButton(onClick = vm::prepareClone) { Text("克隆") }
                         } else if (dir != null && vm.snapshot != null) {
