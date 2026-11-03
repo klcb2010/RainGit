@@ -76,7 +76,10 @@ class LocalGit(private val token: () -> String?) {
         val temporary = File(root, ".rain-clone-${java.util.UUID.randomUUID()}")
         try {
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
-                .setCredentialsProvider(auth()).setCloneAllBranches(allBranches).setBranch(branch)
+                .setCredentialsProvider(auth())
+                .setCloneAllBranches(allBranches)
+                .setBranchesToClone(if (allBranches) emptyList() else listOf("refs/heads/$branch"))
+                .setBranch(branch)
                 // Clone initializes its repository before invoking this callback.
                 // Persist the limits before its first fetch can trigger autoGC;
                 // FileRepository.getConfig() reloads the changed config from disk.
