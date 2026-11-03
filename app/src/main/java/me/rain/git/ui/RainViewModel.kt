@@ -256,7 +256,9 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         nextPollAt = 0L
         actionsStatus = "等待刷新"
         selectedRepo = repo
-        selectedDir = git.directory(store.root(), repo).takeIf { git.isRepo(it) }
+        selectedDir = git.branchDirectory(store.root(), repo, repo.defaultBranch)
+            .takeIf { git.isRepo(it) }
+            ?: git.directory(store.root(), repo).takeIf { git.isRepo(it) }
         snapshot = null
         files = emptyList()
         directories = emptyList()
