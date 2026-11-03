@@ -78,13 +78,32 @@ class LocalGit(private val token: () -> String?) {
             Git.cloneRepository().setURI(repo.cloneUrl).setDirectory(temporary)
                 .setCredentialsProvider(auth())
                 .setCloneAllBranches(allBranches)
-                .setBranchesToClone(if (allBranches) emptyList() else listOf("refs/heads/$branch"))
                 .setBranch(branch)
                 // Clone initializes its repository before invoking this callback.
                 // Persist the limits before its first fetch can trigger autoGC;
                 // FileRepository.getConfig() reloads the changed config from disk.
                 .setTransportConfigCallback { openGit(temporary).close() }
                 .call().use { }
+
+            // Do not rely on CloneCommand's implicit refspec: some clone paths leave
+            // only the selected branch in remote.origin.fetch. Persist the intended
+            // mapping and fetch explicitly so "all branches" really means all heads.
+            val fetchSpec = if (allBranches) {
+                "+refs/heads/*:refs/remotes/origin/*"
+            } else {
+                "+refs/heads/$branch:refs/remotes/origin/$branch"
+            }
+            openGit(temporary).use { git ->
+                git.repository.config.setString("remote", "origin", "fetch", fetchSpec)
+                git.repository.config.save()
+                git.fetch().setRemote("origin")
+                    .setRefSpecs(org.eclipse.jgit.transport.RefSpec(fetchSpec))
+                    .setCredentialsProvider(auth())
+                    .call()
+                require(git.repository.resolve("refs/remotes/origin/$branch") != null) {
+                    "克隆后未找到 origin/$branch，请检查远端分支和网络"
+                }
+            }
             val oldDist = File(dir, "dist")
             require(!oldDist.exists() || !File(temporary, "dist").exists()) {
                 "远端仓库包含 dist，请先移动本地下载目录后重试"
