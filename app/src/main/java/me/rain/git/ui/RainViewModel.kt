@@ -258,8 +258,10 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         nextPollAt = 0L
         actionsStatus = "等待刷新"
         selectedRepo = repo
-        selectedDir = git.branchDirectory(store.root(), repo, repo.defaultBranch)
-            .takeIf { git.isRepo(it) }
+        val lastBranch = store.lastBranch(repo.fullName)
+        selectedDir = lastBranch?.let { branch ->
+            git.branchDirectory(store.root(), repo, branch).takeIf { git.isRepo(it) }
+        } ?: git.branchDirectory(store.root(), repo, repo.defaultBranch).takeIf { git.isRepo(it) }
             ?: git.directory(store.root(), repo).takeIf { git.isRepo(it) }
         snapshot = null
         files = emptyList()
@@ -387,8 +389,23 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun rememberLastBranch(dir: File) {
+        val branch = runCatching { git.currentBranch(dir) }.getOrNull()?.takeIf { it.isNotBlank() } ?: return
+        val origin = runCatching { git.remoteUrl(dir).removeSuffix(".git") }.getOrDefault("")
+        if (origin.isBlank()) return
+        val repo = selectedRepo?.takeIf { it.cloneUrl.removeSuffix(".git") == origin }
+            ?: repos.firstOrNull { it.cloneUrl.removeSuffix(".git") == origin }
+            ?: return
+        store.setLastBranch(repo.fullName, branch)
+    }
+
     private suspend fun refreshLocalInner(dir: File) {
-        val result = local { git.excludeDist(dir); Triple(git.snapshot(dir), git.files(dir), git.directories(dir)) }
+        val result = local {
+            git.excludeDist(dir)
+            val data = Triple(git.snapshot(dir), git.files(dir), git.directories(dir))
+            rememberLastBranch(dir)
+            data
+        }
         if (selectedDir == dir) {
             snapshot = result.first
             files = result.second
