@@ -461,9 +461,11 @@ class RainViewModel(application: Application) : AndroidViewModel(application) {
     fun publishChanges(commitMessage: String, onPublished: () -> Unit = {}) = launchAction {
         require(!downloading) { "下载完成后再发布" }
         val dir = selectedDir ?: throw IOException("请先克隆仓库")
+        // 静默执行与详情页右上角刷新按钮相同的工作区刷新，不触发第二个 UI 操作。
+        refreshLocalInner(dir)
         require(commitMessage.isNotBlank()) { "请输入这次修改的简短说明" }
         require(store.author.isNotBlank() && store.email.contains('@')) { "请先在设置里补全提交身份" }
-        val before = local { git.snapshot(dir) }
+        val before = snapshot?.takeIf { selectedDir == dir } ?: local { git.snapshot(dir) }
         require(before.conflicts.isEmpty()) { "发现冲突文件，请先处理冲突" }
         val dirty = (before.staged + before.changed + before.untracked + before.deleted).distinct()
         require(dirty.isNotEmpty()) { "没有待发布的文件。可直接推送已有提交" }
