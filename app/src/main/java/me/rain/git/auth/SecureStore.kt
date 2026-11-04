@@ -104,5 +104,20 @@ class SecureStore(private val context: Context) {
         return dir
     }
 
+    fun lastBranch(repositoryFullName: String): String? {
+        val key = "last_branch_" + Base64.encodeToString(
+            repositoryFullName.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP
+        )
+        return prefs.getString(key, null)?.takeIf { it.isNotBlank() }
+    }
+
+    fun setLastBranch(repositoryFullName: String, branch: String) {
+        if (repositoryFullName.isBlank() || branch.isBlank()) return
+        val key = "last_branch_" + Base64.encodeToString(
+            repositoryFullName.toByteArray(Charsets.UTF_8), Base64.URL_SAFE or Base64.NO_WRAP
+        )
+        prefs.edit().putString(key, branch).apply()
+    }
+
     fun resetRoot() { prefs.edit().remove("root").apply() }
 }
